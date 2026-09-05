@@ -1,0 +1,15 @@
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+cache/
+artifacts/
+typechain-types/
+results/
+*.egg-info/
+dist/
+build/
+.env.local
+*.log
