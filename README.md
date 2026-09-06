@@ -11,11 +11,38 @@ FaceLens CLI accepts a photograph of a person, performs genuine reverse-image di
 ## Pipeline
 
 ```
-Image → Face Detection → Face Embedding → Reverse Image Search
-  → Public Web Results → Candidate Images → Face Detection on Candidates
-  → ArcFace Comparison → Rank Matches → Verification Result
-  → SHA-256 Hash → Blockchain Record
+Image → Face Detection → Face-Only Crop (background masked) → Face Embedding
+  → Reverse Image Search (face-only query)
+  → Google Lens identity matching → Public Web Results
+  → Candidate Images → Face Detection on Candidates → reject non-face results
+  → ArcFace Comparison → Rank Matches → Social Profile Discovery by Name
+  → Verification Result → SHA-256 Hash → Blockchain Record
 ```
+
+## Face-Only (Person) Search
+
+By default the pipeline **crops the query to the detected face only** and blackens
+everything outside an eye–nose–chin ellipse — background, body, glasses, logos and
+ads are removed so search engines match the *person*, not the surrounding image.
+
+- The face-only crop is saved to `results/face_only_*.jpg` so you can verify what was searched.
+- Non-face results (products, ads, logos, graphics) are rejected before profile extraction.
+- Pass `--search-full-image` to search the whole image instead.
+
+## Social Profile Discovery
+
+Search results that contain a detected face are used to extract social media
+handles. When the subject's name can be inferred from the results, the pipeline
+additionally queries each major platform (`site:instagram.com/<handle>`,
+`site:twitter.com/<handle>`, etc.) to surface the person's genuine profile pages
+(Facebook, Instagram, X, TikTok, YouTube, LinkedIn, Reddit, GitHub, and more).
+
+## What "no profiles found" means
+
+If no web image contains a matching face — or the person has no publicly indexed
+photo anywhere — the tool reports zero profiles. That is the truthful answer for
+an unindexed face; no search service (free or paid) can surface profiles for a
+face that has no public presence.
 
 ## Three Core Technologies
 
@@ -81,6 +108,9 @@ cp .env.example .env
 |---|---|
 | `REVERSE_SEARCH_API_KEY` | SerpAPI key (free tier works; reverse-image engine needs paid plan) |
 | `REVERSE_SEARCH_PROVIDER` | `serpapi` or `bing` (default: `serpapi` with auto-fallback) |
+| `GOOGLE_CSE_KEY` / `GOOGLE_CSE_ID` | Google Custom Search credentials — free 100 searches/day fallback for social profile discovery when SerpAPI quota runs out |
+| `FACE_FIRST_SEARCH` | `true` (default) crops the query to the face only; `false` searches the whole image |
+| `GOOGLE_LENS` | `true` (default) additionally queries Google Lens via SerpAPI for identity matching |
 | `RPC_URL` | Ethereum RPC endpoint (default: Sepolia PublicNode) |
 | `PRIVATE_KEY` | Wallet private key for blockchain transactions |
 | `CONTRACT_ADDRESS` | Deployed FaceVerification contract address |
@@ -92,7 +122,12 @@ cp .env.example .env
 ```bash
 python main.py search --image person.jpg
 python main.py search --image person.jpg --limit 30
+# Supply the person's name when you know it (skips name guessing):
+python main.py search --image person.jpg --name "Tushar Pamnani"
 ```
+
+When no web image matches the face, the tool asks for the person's name on the
+terminal (if run interactively) so it can search their socials directly.
 
 ### Verify saved result
 

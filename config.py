@@ -17,6 +17,8 @@ SIMILARITY_THRESHOLD_LOW = 0.60
 MAX_IMAGE_SIZE_MB = 10
 SUPPORTED_FORMATS = {".jpg", ".jpeg", ".png", ".webp"}
 DOWNLOAD_TIMEOUT = 15
+SOCIAL_PAGE_TIMEOUT = 8
+MAX_PROFILE_PAGES = 15
 MAX_CANDIDATE_IMAGES = 50
 
 RANKING_WEIGHTS = {
@@ -28,6 +30,10 @@ RANKING_WEIGHTS = {
 
 REVERSE_SEARCH_API_KEY = os.getenv("REVERSE_SEARCH_API_KEY", "")
 REVERSE_SEARCH_PROVIDER = os.getenv("REVERSE_SEARCH_PROVIDER", "serpapi")
+FACE_FIRST_SEARCH = os.getenv("FACE_FIRST_SEARCH", "true").strip().lower() == "true"
+GOOGLE_LENS = os.getenv("GOOGLE_LENS", "true").strip().lower() == "true"
+GOOGLE_CSE_KEY = os.getenv("GOOGLE_CSE_KEY", "")
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
 
 RPC_URL = os.getenv("RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com")
 PRIVATE_KEY = os.getenv("PRIVATE_KEY", "")

@@ -1,4 +1,6 @@
 import hashlib
+import os
+import re
 from pathlib import Path
 from PIL import Image
 import cv2
@@ -6,11 +8,45 @@ import numpy as np
 
 from config import SUPPORTED_FORMATS, MAX_IMAGE_SIZE_MB
 
+MANGLED_WINDOWS_PATH = re.compile(r"^[A-Za-z]:[^/\\]*$")
+WINDOWS_ABS_PATH = re.compile(r"^([A-Za-z]):[/\\](.*)$")
+
+
+def _path_hint(path: str) -> str:
+    if MANGLED_WINDOWS_PATH.match(path):
+        return (
+            " (Tip: the shell stripped the backslashes from this Windows path. "
+            "Re-run with the path quoted and using forward slashes, e.g. "
+            '--image "C:/Users/<you>/Screenshot 2025-11-21 201653.png" '
+            "or with backslashes inside double quotes.)"
+        )
+    m = WINDOWS_ABS_PATH.match(path)
+    if os.name != "nt" and m:
+        drive, rest = m.group(1).lower(), m.group(2).replace("\\", "/")
+        return (
+            f" (Tip: this looks like a Windows path, but Python is running on WSL/Linux, "
+            f"where Windows drives are mounted under /mnt/. Try "
+            f'--image "/mnt/{drive}/{rest}".)'
+        )
+    return ""
+
+
+def resolve_image_path(path: str) -> tuple[str, bool]:
+    if Path(path).exists():
+        return path, False
+    m = WINDOWS_ABS_PATH.match(path)
+    if os.name != "nt" and m:
+        drive, rest = m.group(1).lower(), m.group(2).replace("\\", "/")
+        mapped = f"/mnt/{drive}/{rest}"
+        if Path(mapped).exists():
+            return mapped, True
+    return path, False
+
 
 def validate_image(path: str) -> tuple[bool, str]:
     p = Path(path)
     if not p.exists():
-        return False, f"File not found: {path}"
+        return False, f"File not found: {path}{_path_hint(path)}"
     if p.suffix.lower() not in SUPPORTED_FORMATS:
         return False, f"Unsupported format: {p.suffix}. Use {SUPPORTED_FORMATS}"
     if p.stat().st_size > MAX_IMAGE_SIZE_MB * 1024 * 1024:

@@ -105,6 +105,62 @@ class SerpApiProvider(ReverseSearchProvider):
         return detect_platform(url)
 
 
+class GoogleLensProvider(ReverseSearchProvider):
+    def __init__(self, api_key: str, max_attempts: int = 2):
+        self.api_key = api_key
+        self.max_attempts = max_attempts
+        self.base_url = "https://serpapi.com/search.json"
+
+    def name(self) -> str:
+        return "google-lens"
+
+    def search(self, image_path: str) -> list[dict]:
+        hosted = upload_to_host(image_path)
+        if not hosted:
+            return []
+
+        lens_url = f"https://lens.google.com/uploadbyurl?hl=en&url={hosted}"
+        data = None
+        for attempt in range(self.max_attempts):
+            try:
+                resp = requests.get(
+                    self.base_url,
+                    params={"engine": "google_lens", "api_key": self.api_key, "url": lens_url},
+                    timeout=60,
+                )
+                candidate = resp.json()
+            except Exception:
+                break
+            if "error" in candidate:
+                break
+            if candidate.get("visual_matches"):
+                data = candidate
+                break
+            if candidate.get("search_metadata", {}).get("status") in ("processing", "pending"):
+                import time
+                time.sleep(7)
+                continue
+            break
+
+        if not data:
+            return []
+
+        results = []
+        for item in data.get("visual_matches", []):
+            url = item.get("link", "") or item.get("source", "")
+            if not url:
+                continue
+            results.append({
+                "title": item.get("title", ""),
+                "url": url,
+                "domain": urlparse(url).netloc,
+                "image_url": item.get("thumbnail", ""),
+                "platform": detect_platform(url),
+                "source": "google-lens",
+            })
+        return results
+
+
 class ScraperProvider(ReverseSearchProvider):
     def __init__(self):
         self.session = requests.Session()
@@ -138,6 +194,12 @@ class ScraperProvider(ReverseSearchProvider):
 
             resp = self.session.get(search_url, timeout=30, allow_redirects=True)
             if resp.status_code != 200:
+                return []
+
+            # Bing silently redirects imgurl queries with no match to a generic
+            # images feed ("https://www.bing.com/images?FORM=..."). Those results
+            # are unrelated noise, so treat it as "no matches".
+            if resp.url.startswith("https://www.bing.com/images?"):
                 return []
 
             html = resp.text
@@ -177,13 +239,23 @@ class ScraperProvider(ReverseSearchProvider):
     def _search_yandex(self, image_path: str) -> list[dict]:
         results = []
         try:
+            session = requests.Session()
+            session.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+            })
+            try:
+                session.get("https://yandex.com/images/", timeout=DOWNLOAD_TIMEOUT)
+            except Exception:
+                pass
             with open(image_path, "rb") as f:
-                resp = self.session.post(
+                resp = session.post(
                     "https://yandex.com/images/search?rpt=imageview&format=json",
+                    headers={"Referer": "https://yandex.com/images/"},
                     files={"upfile": ("image.jpg", f, "image/jpeg")},
                     timeout=DOWNLOAD_TIMEOUT,
                 )
-            if resp.status_code == 200:
+            if resp.status_code == 200 and not resp.text.startswith('{"cnt":"pageview_candidate"'):
                 try:
                     data = resp.json()
                     items = data.get("cbir-page", {}).get("items", [])
